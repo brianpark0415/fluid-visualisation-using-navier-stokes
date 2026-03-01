@@ -38,3 +38,54 @@ def lin_solve(b, x, x0, a, c, N, iterations = 20):
                     x[i,     j - 1] + x[i,     j + 1]
                 )) * inv_c
         set_boundary(b, x, N)
+    
+# implicit diffusion (unconditionally stable)
+@njit(cache=True)
+def diffuse(b, x, x0, diff, dt, N):
+    """
+    Implicit diffusion: solves (I - diff*dt*Laplacian) x = x0
+    a = N^2 * diff * dt
+    """
+    a = N * N * diff * dt
+    lin_solve(b, x, x0, a, 1 + 4 * a, N)
+
+# advection (semi Lagrangian)
+@njit(cache=True)
+def advect(b, d, d0, u, v, dt, N):
+    """
+    Semi-Lagrangian advection: trace particles backward along velocity field,
+    then interpolate. Unconditionally stable but introduces numerical diffusion.
+    Reference: Stam 1999, Section 3.
+    """
+    dt0 = dt * N
+
+    for i in range(1, N + 1):
+        for j in range(1, N + 1):
+            # Backtrace position
+            x = i - dt0 * u[i, j]
+            y = j - dt0 * v[i, j]
+
+            # Clamp to grid interior
+            if x < 0.5:      x = 0.5
+            if x > N + 0.5:  x = N + 0.5
+            if y < 0.5:      y = 0.5
+            if y > N + 0.5:  y = N + 0.5
+
+            # Integer indices for bilinear interpolation
+            i0 = int(x)
+            i1 = i0 + 1
+            j0 = int(y)
+            j1 = j0 + 1
+
+            # Interpolation weights
+            s1 = x - i0
+            s0 = 1.0 - s1
+            t1 = y - j0
+            t0 = 1.0 - t1
+
+            d[i, j] = (
+                s0 * (t0 * d0[i0, j0] + t1 * d0[i0, j1]) +
+                s1 * (t0 * d0[i1, j0] + t1 * d0[i1, j1])
+            )
+
+    set_boundary(b, d, N)
