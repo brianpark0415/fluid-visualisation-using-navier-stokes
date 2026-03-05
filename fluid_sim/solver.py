@@ -89,3 +89,38 @@ def advect(b, d, d0, u, v, dt, N):
             )
 
     set_boundary(b, d, N)
+
+# projection step - enforcing imcompressibility. (div u = 0)
+@njit(cache=True)
+def project(u, v, p, div, N):
+    """
+    Helmholtz decomposition: remove the divergent part of the velocity field.
+    Solves the pressure Poisson equation then subtracts the pressure gradient.
+    This is the key step that makes the flow physically incompressible.
+    Reference: Stam 1999, Section 4.
+    """
+    h = 1.0 / N
+
+    # Compute divergence of velocity field
+    for i in range(1, N + 1):
+        for j in range(1, N + 1):
+            div[i, j] = -0.5 * h * (
+                u[i + 1, j] - u[i - 1, j] +
+                v[i,     j + 1] - v[i,     j - 1]
+            )
+            p[i, j] = 0.0
+
+    set_boundary(0, div, N)
+    set_boundary(0, p, N)
+
+    # Solve pressure Poisson equation: Laplacian(p) = div
+    lin_solve(0, p, div, 1, 4, N)
+
+    # Subtract pressure gradient from velocity to make it divergence-free
+    for i in range(1, N + 1):
+        for j in range(1, N + 1):
+            u[i, j] -= 0.5 * (p[i + 1, j] - p[i - 1, j]) / h
+            v[i, j] -= 0.5 * (p[i,     j + 1] - p[i,     j - 1]) / h
+
+    set_boundary(1, u, N)
+    set_boundary(2, v, N)
