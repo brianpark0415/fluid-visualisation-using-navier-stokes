@@ -124,3 +124,40 @@ def project(u, v, p, div, N):
 
     set_boundary(1, u, N)
     set_boundary(2, v, N)
+
+# vorticity confinement
+
+@njit(cache=True)
+def vorticity_confinement(u, v, N, dt, epsilon=5.0):
+    """
+    Adds back rotational energy lost to numerical diffusion during advection.
+    epsilon controls how much vorticity is restored — higher = more turbulent.
+    Reference: Fedkiw, Stam & Jensen, SIGGRAPH 2001.
+    """
+    curl = np.zeros((N + 2, N + 2))
+
+    # Compute curl (z-component of vorticity in 2D)
+    for i in range(1, N + 1):
+        for j in range(1, N + 1):
+            curl[i, j] = (
+                (v[i + 1, j] - v[i - 1, j]) -
+                (u[i, j + 1] - u[i, j - 1])
+            ) * 0.5
+
+    # Compute gradient of |curl| and apply confinement force
+    for i in range(1, N + 1):
+        for j in range(1, N + 1):
+            dw_dx = (abs(curl[i + 1, j]) - abs(curl[i - 1, j])) * 0.5
+            dw_dy = (abs(curl[i, j + 1]) - abs(curl[i, j - 1])) * 0.5
+
+            length = (dw_dx ** 2 + dw_dy ** 2) ** 0.5
+            if length > 1e-10:
+                dw_dx /= length
+                dw_dy /= length
+
+            # Force perpendicular to gradient of |curl|
+            u[i, j] += epsilon * dt * ( dw_dy * curl[i, j])
+            v[i, j] += epsilon * dt * (-dw_dx * curl[i, j])
+
+    set_boundary(1, u, N)
+    set_boundary(2, v, N)
