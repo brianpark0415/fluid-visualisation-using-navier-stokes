@@ -1,1 +1,0 @@
-# using numpy for pressure, u, v, maybe colours
