@@ -161,3 +161,36 @@ def vorticity_confinement(u, v, N, dt, epsilon=5.0):
 
     set_boundary(1, u, N)
     set_boundary(2, v, N)
+
+# ---------------------------------------------------------------------------
+# Full simulation step
+# ---------------------------------------------------------------------------
+
+def step(N, dt, diff, visc, u, v, u_prev, v_prev, dens, dens_prev,
+         vorticity_eps=5.0):
+    """
+    One full timestep of Stam's fluid solver.
+    Order: velocity step → density step.
+    """
+    # --- Velocity step ---
+    # 1. Diffuse velocity (viscosity)
+    diffuse(1, u_prev, u, visc, dt, N)
+    diffuse(2, v_prev, v, visc, dt, N)
+
+    # 2. Project to make divergence-free
+    project(u_prev, v_prev, u, v, N)
+
+    # 3. Advect velocity along itself (self-advection)
+    advect(1, u, u_prev, u_prev, v_prev, dt, N)
+    advect(2, v, v_prev, u_prev, v_prev, dt, N)
+
+    # 4. Project again after advection
+    project(u, v, u_prev, v_prev, N)
+
+    # 5. Vorticity confinement (restores turbulent detail)
+    if vorticity_eps > 0:
+        vorticity_confinement(u, v, N, dt, vorticity_eps)
+
+    # --- Density (dye) step ---
+    diffuse(0, dens_prev, dens, diff, dt, N)
+    advect(0, dens, dens_prev, u, v, dt, N)
